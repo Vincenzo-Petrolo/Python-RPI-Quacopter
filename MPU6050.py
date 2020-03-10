@@ -13,11 +13,6 @@ GYRO_XOUT_H  = 0x43
 GYRO_YOUT_H  = 0x45
 GYRO_ZOUT_H  = 0x47
 
-
-bus = smbus.SMBus(1) 	# or bus = smbus.SMBus(0) for older version boards
-Device_Address = 0x68   # MPU6050 device address
-
-
 def MPU_Init():
 	#write to sample rate register
 	bus.write_byte_data(Device_Address, SMPLRT_DIV, 7)
@@ -46,3 +41,8 @@ def read_raw_data(addr):
         if(value > 32768):
                 value = value - 65536
         return value
+
+bus = smbus.SMBus(1) 	# or bus = smbus.SMBus(0) for older version boards
+Device_Address = 0x68   # MPU6050 device address
+
+MPU_Init()

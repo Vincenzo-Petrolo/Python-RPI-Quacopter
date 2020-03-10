@@ -1,8 +1,11 @@
 from simple_pid import PID
-import pigpio #importing GPIO library
+from FILTERS import *
+import os
+os.system ("sudo pigpiod") #Launching GPIO library
+import pigpio
 import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
-import MPU6050
+from MPU6050 import *
 import time
 import math
 
@@ -18,7 +21,7 @@ class quadcopter():
         self.m3     = 0
         self.m4     = 0
         self.MAX    = 2000
-        self.MIN    = 1000                      #to define
+        self.MIN    = 1100                      #to define
         self.m1_pin = m1_pin
         self.m2_pin = m2_pin
         self.m3_pin = m3_pin
@@ -27,6 +30,8 @@ class quadcopter():
         self.desidred_angle = 0
         self.pi = pigpio.pi()                   #object rpi
         
+        self.time   = 0
+
         #PID parameters
         self.Kp     = 1
         self.Ki     = 0
@@ -36,12 +41,14 @@ class quadcopter():
         self.pidY    = PID(Kp=self.Kp,Ki=self.Ki,Kd=self.Kd,setpoint=self.desidred_angle)
         
         #MPU starts
-        MPU6050.MPU_Init()
+
+        #ESC calibration
+
+        #self.calibrate()
 
     def get_elapsed_time(self):
-        before     = self.now
-        self.now   = time.time_ns()
-        return (self.now - before)
+        self.time   = self.time + pow(10,-4)
+        return self.time                   #returns sampling frequency of MPU6050
 
     def get_roll_yaw_pitch(self):           #yaw doesnt get calc
     #Read Accelerometer raw value
@@ -54,20 +61,27 @@ class quadcopter():
         gyro_y = read_raw_data(GYRO_YOUT_H)
         gyro_z = read_raw_data(GYRO_ZOUT_H)
 
+
         #Full scale range +/- 250 degree/C as per sensitivity scale factor
-        Ax = acc_x/16384.0
-        Ay = acc_y/16384.0
+        Ax = acc_x/16384.0 + 0.12890625 - 0.002197265625
+        Ay = acc_y/16384.0 - 0.058837890625
         Az = acc_z/16384.0
 
-        Gx = gyro_x/131.0
-        Gy = gyro_y/131.0
+        Gx = gyro_x/131.0 + 0.732824427480916 - 0.007633587786259555    #is the offset, this value is temporary
+        Gy = gyro_y/131.0 + 0.03816793893129771
         Gz = gyro_z/131.0
+        '''
+        print("ACC: ")
+        print(Ax,Ay,Az)
+        print("\n")
 
-        acc_x_angle = math.atan(Ay)/math.sqrt(math.pow(Ax,2) + math.pow(Az,2))*rad_to_deg
-        acc_y_angle = math.atan(Ax)/math.sqrt(math.pow(Ay,2) + math.pow(Az,2))*rad_to_deg
+        print("GYRO: ")
+        print(Gx,Gy,Gz)
+        print("\n")
+        '''
 
-        self.roll = 0.98 * (self.roll + Gx*self.get_elapsed_time()) + 0.02*acc_x_angle
-        self.pitch = 0.98 * (self.pitch + Gy*self.get_elapsed_time()) + 0.02*acc_y_angle
+        self.roll   = int(complementary_filter(self.roll,Ax,Gx,self.get_elapsed_time(),0.98))   #instead of 1 there should be the period 1/f where f is the frequency of the signal coming from the MPU6050
+        self.pitch  = int(complementary_filter(self.pitch,Ay,Gy,self.get_elapsed_time(),0.98))   #instead of 1 there should be the period 1/f where f is the frequency of the signal coming from the MPU6050
 
         return (self.roll,self.pitch,self.yaw)
     
@@ -86,24 +100,59 @@ class quadcopter():
         return False
     
     def set_m1_speed(self,speed):
-        self.m1 = speed
+        if (speed > self.MAX):
+            self.m1 = self.MAX
+        else:
+            if (speed < self.MIN):
+                self.m1 = self.MIN
+            else:
+                self.m1 = speed
+
         self.pi.set_servo_pulsewidth(self.m1_pin,self.m1)
     def set_m2_speed(self,speed):
-        self.m2 = speed
+        if (speed > self.MAX):
+            self.m2 = self.MAX
+        else:
+            if (speed < self.MIN):
+                self.m2 = self.MIN
+            else:
+                self.m2 = speed
+        
         self.pi.set_servo_pulsewidth(self.m2_pin,self.m2)
     def set_m3_speed(self,speed):
-        self.m3 = speed
+        if (speed > self.MAX):
+            self.m3 = self.MAX
+        else:
+            if (speed < self.MIN):
+                self.m3 = self.MIN
+            else:
+                self.m3 = speed
+        
         self.pi.set_servo_pulsewidth(self.m3_pin,self.m3)
     def set_m4_speed(self,speed):
-        self.m4 = speed
+        if (speed > self.MAX):
+            self.m4 = self.MAX
+        else:
+            if (speed < self.MIN):
+                self.m4 = self.MIN
+            else:
+                self.m4 = speed
+                
         self.pi.set_servo_pulsewidth(self.m4_pin,self.m4)
     
 
     def balance_PID(self):
         vect = self.get_roll_yaw_pitch()
+        pid_response_x  = int(self.pidX(vect[0]))
+        pid_response_y  = int(self.pidY(vect[1]))
+        
+        print(vect)
+        print("\n")
 
-        pid_response_x  = self.pidX(vect[0])
-        pid_response_y  = self.pidY(vect[1])
+        '''                
+        print("PIDX: " + str(pid_response_x) + "PIDY: " + str(pid_response_y))
+        print("\n")
+        '''
 
         #X balancing
         self.set_m1_speed(self.m1+pid_response_x)
@@ -120,3 +169,24 @@ class quadcopter():
         self.set_m2_speed(self.m2-pid_response_y)
 
 
+    def calibrate(self):   #This is the auto calibration procedure of a normal ESC
+        self.pi.set_servo_pulsewidth(self.m1_pin, 0)
+        print("Disconnect the battery and press Enter")
+        inp = input()
+        if inp == '':
+            self.pi.set_servo_pulsewidth(self.m1_pin,self.MAX)
+            print("Connect the battery NOW.. you will here two beeps, then wait for a gradual falling tone then press Enter")
+            inp = input()
+            if inp == '':            
+                self.pi.set_servo_pulsewidth(self.m1_pin, self.MIN)
+                print ("Wierd eh! Special tone")
+                time.sleep(7)
+                print ("Wait for it ....")
+                time.sleep (5)
+                print ("Im working on it, DONT WORRY JUST WAIT.....")
+                self.pi.set_servo_pulsewidth(self.m1_pin, 0)
+                time.sleep(2)
+                print ("Arming ESC now...")
+                self.pi.set_servo_pulsewidth(self.m1_pin, self.MIN)
+                time.sleep(1)
+                print ("See.... uhhhhh")
