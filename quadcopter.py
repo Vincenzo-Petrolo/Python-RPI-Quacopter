@@ -1,6 +1,7 @@
 from simple_pid import PID
 from FILTERS import *
 import os
+os.system("sudo killall pigpiod")
 os.system ("sudo pigpiod") #Launching GPIO library
 import pigpio
 import paho.mqtt.client as mqtt
@@ -21,7 +22,7 @@ class quadcopter():
         self.m3     = 0
         self.m4     = 0
         self.MAX    = 2000
-        self.MIN    = 1100                      #to define
+        self.MIN    = 700                      #to define
         self.m1_pin = m1_pin
         self.m2_pin = m2_pin
         self.m3_pin = m3_pin
@@ -63,13 +64,13 @@ class quadcopter():
 
 
         #Full scale range +/- 250 degree/C as per sensitivity scale factor
-        Ax = acc_x/16384.0 + 0.12890625 - 0.002197265625
-        Ay = acc_y/16384.0 - 0.058837890625
-        Az = acc_z/16384.0
+        Ax = int(acc_x/16384.0 + 0.12890625 - 0.002197265625)
+        Ay = int(acc_y/16384.0 - 0.058837890625)
+        Az = int(acc_z/16384.0)
 
-        Gx = gyro_x/131.0 + 0.732824427480916 - 0.007633587786259555    #is the offset, this value is temporary
-        Gy = gyro_y/131.0 + 0.03816793893129771
-        Gz = gyro_z/131.0
+        Gx = int(gyro_x/131.0 + 0.732824427480916 - 0.007633587786259555)    #is the offset, this value is temporary
+        Gy = int(gyro_y/131.0 + 0.03816793893129771)
+        Gz = int(gyro_z/131.0)
         '''
         print("ACC: ")
         print(Ax,Ay,Az)
@@ -80,8 +81,8 @@ class quadcopter():
         print("\n")
         '''
 
-        self.roll   = int(complementary_filter(self.roll,Ax,Gx,self.get_elapsed_time(),0.98))   #instead of 1 there should be the period 1/f where f is the frequency of the signal coming from the MPU6050
-        self.pitch  = int(complementary_filter(self.pitch,Ay,Gy,self.get_elapsed_time(),0.98))   #instead of 1 there should be the period 1/f where f is the frequency of the signal coming from the MPU6050
+        self.roll   = int(complementary_filter(self.roll,Ax,Gx,self.get_elapsed_time(),0.99))   #instead of 1 there should be the period 1/f where f is the frequency of the signal coming from the MPU6050
+        self.pitch  = int(complementary_filter(self.pitch,Ay,Gy,self.get_elapsed_time(),0.99))   #instead of 1 there should be the period 1/f where f is the frequency of the signal coming from the MPU6050
 
         return (self.roll,self.pitch,self.yaw)
     

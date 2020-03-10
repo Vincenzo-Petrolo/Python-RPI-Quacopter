@@ -1,5 +1,4 @@
 def complementary_filter(angle,acc,gyro,dt,alpha):
-
-        angle = (alpha)*(angle + gyro*dt) + (1-alpha)*acc
-
-        return angle
+        if (gyro == 0 and acc == 0):
+                return angle
+        return (alpha)*(angle + gyro*dt) + (1-alpha)*acc
