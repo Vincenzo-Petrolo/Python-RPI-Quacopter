@@ -13,7 +13,7 @@ import math
 rad_to_deg = 180/3.141592654
 
 class quadcopter():
-    def __init__(self,m1_pin,m2_pin,m3_pin,m4_pin):
+    def __init__(self,m1_pin,m2_pin,m3_pin,m4_pin,calibrating):
         self.pitch  = 0
         self.roll   = 0
         self.yaw    = 0
@@ -40,12 +40,20 @@ class quadcopter():
 
         self.pidX    = PID(Kp=self.Kp,Ki=self.Ki,Kd=self.Kd,setpoint=self.desidred_angle)
         self.pidY    = PID(Kp=self.Kp,Ki=self.Ki,Kd=self.Kd,setpoint=self.desidred_angle)
+
+        #MQTT info
+        #self.hostname   = "10.42.0.1"
+        #self.mqttc = mqtt.Client("drone")
+        #self.mqttc.connect(self.hostname, 1883)
         
+
         #MPU starts
 
         #ESC calibration
+        if calibrating == True:
+            self.calibrate()
 
-        #self.calibrate()
+
 
     def get_elapsed_time(self):
         self.time   = self.time + pow(10,-4)
@@ -110,16 +118,19 @@ class quadcopter():
                 self.m1 = speed
 
         self.pi.set_servo_pulsewidth(self.m1_pin,self.m1)
+
     def set_m2_speed(self,speed):
         if (speed > self.MAX):
             self.m2 = self.MAX
         else:
             if (speed < self.MIN):
-                self.m2 = self.MIN
+                self.m2 = 0#self.MIN
             else:
                 self.m2 = speed
         
         self.pi.set_servo_pulsewidth(self.m2_pin,self.m2)
+
+
     def set_m3_speed(self,speed):
         if (speed > self.MAX):
             self.m3 = self.MAX
@@ -130,12 +141,14 @@ class quadcopter():
                 self.m3 = speed
         
         self.pi.set_servo_pulsewidth(self.m3_pin,self.m3)
+
+
     def set_m4_speed(self,speed):
         if (speed > self.MAX):
             self.m4 = self.MAX
         else:
             if (speed < self.MIN):
-                self.m4 = self.MIN
+                self.m4 = 0#self.MIN
             else:
                 self.m4 = speed
                 
@@ -146,28 +159,35 @@ class quadcopter():
         vect = self.get_roll_yaw_pitch()
         pid_response_x  = int(self.pidX(vect[0]))
         pid_response_y  = int(self.pidY(vect[1]))
-        
         print(vect)
         print("\n")
 
-        '''                
+        '''                        
         print("PIDX: " + str(pid_response_x) + "PIDY: " + str(pid_response_y))
         print("\n")
         '''
 
         #X balancing
+        '''
         self.set_m1_speed(self.m1+pid_response_x)
         self.set_m4_speed(self.m4+pid_response_x)
         #the - sign is due to the postive/negative default orientation of the MPU
         self.set_m2_speed(self.m2-pid_response_x)
         self.set_m3_speed(self.m3-pid_response_x)
+        '''
 
         #Y balancing
+        #just for 1D testing
+        self.set_m1_speed(self.m1+pid_response_y)
+        self.set_m3_speed(self.m3-pid_response_y)
+
+        '''
         self.set_m4_speed(self.m4+pid_response_y)
         self.set_m3_speed(self.m3+pid_response_y)
         
         self.set_m1_speed(self.m1-pid_response_y)
         self.set_m2_speed(self.m2-pid_response_y)
+        '''
 
 
     def calibrate(self):   #This is the auto calibration procedure of a normal ESC
@@ -191,3 +211,25 @@ class quadcopter():
                 self.pi.set_servo_pulsewidth(self.m1_pin, self.MIN)
                 time.sleep(1)
                 print ("See.... uhhhhh")
+
+    def set_all_speed(self,speed):
+        self.set_m1_speed(speed)
+        self.set_m2_speed(0)
+        self.set_m3_speed(speed)
+        self.set_m4_speed(0)
+
+    #MQTT FUNCTIONS
+
+    def publish_info(self):
+        '''
+        the topics are of type drone/(angle,motor_speed)/([roll,pitch,yaw],[m1,m2,m3,m4])
+        '''
+        self.mqttc.publish("drone/angle/roll",str(self.roll))
+        self.mqttc.publish("drone/angle/pitch",str(self.pitch))
+        self.mqttc.publish("drone/angle/yaw",str(self.yaw))
+
+        self.mqttc.publish("drone/motor_speed/m1",str(self.m1))
+        self.mqttc.publish("drone/motor_speed/m2",str(self.m2))
+        self.mqttc.publish("drone/motor_speed/m3",str(self.m3))
+        self.mqttc.publish("drone/motor_speed/m4",str(self.m4))
+
