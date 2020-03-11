@@ -22,7 +22,7 @@ class quadcopter():
         self.m3     = 0
         self.m4     = 0
         self.MAX    = 2000
-        self.MIN    = 700                      #to define
+        self.MIN    = 1100                      #to define
         self.m1_pin = m1_pin
         self.m2_pin = m2_pin
         self.m3_pin = m3_pin
@@ -111,22 +111,19 @@ class quadcopter():
     def set_m1_speed(self,speed):
         if (speed > self.MAX):
             self.m1 = self.MAX
-        else:
-            if (speed < self.MIN):
-                self.m1 = self.MIN
-            else:
-                self.m1 = speed
-
+        if (speed < self.MIN):
+            self.m1 = self.MIN
+        if (speed >= self.MIN and speed <= self.MAX):
+            self.m1 = speed
         self.pi.set_servo_pulsewidth(self.m1_pin,self.m1)
 
     def set_m2_speed(self,speed):
         if (speed > self.MAX):
             self.m2 = self.MAX
-        else:
-            if (speed < self.MIN):
-                self.m2 = 0#self.MIN
-            else:
-                self.m2 = speed
+        if (speed < self.MIN):
+            self.m2 = self.MIN
+        if (speed >= self.MIN and speed <= self.MAX):
+            self.m2 = speed
         
         self.pi.set_servo_pulsewidth(self.m2_pin,self.m2)
 
@@ -134,11 +131,10 @@ class quadcopter():
     def set_m3_speed(self,speed):
         if (speed > self.MAX):
             self.m3 = self.MAX
-        else:
-            if (speed < self.MIN):
-                self.m3 = self.MIN
-            else:
-                self.m3 = speed
+        if (speed < self.MIN):
+            self.m3 = self.MIN
+        if (speed >= self.MIN and speed <= self.MAX):
+            self.m3 = speed
         
         self.pi.set_servo_pulsewidth(self.m3_pin,self.m3)
 
@@ -146,12 +142,11 @@ class quadcopter():
     def set_m4_speed(self,speed):
         if (speed > self.MAX):
             self.m4 = self.MAX
-        else:
-            if (speed < self.MIN):
-                self.m4 = 0#self.MIN
-            else:
-                self.m4 = speed
-                
+        if (speed < self.MIN):
+            self.m4 = self.MIN
+        if (speed >= self.MIN and speed <= self.MAX):
+            self.m4 = speed
+        
         self.pi.set_servo_pulsewidth(self.m4_pin,self.m4)
     
 
@@ -179,7 +174,7 @@ class quadcopter():
         #Y balancing
         #just for 1D testing
         self.set_m1_speed(self.m1+pid_response_y)
-        self.set_m3_speed(self.m3-pid_response_y)
+        self.set_m4_speed(self.m4-pid_response_y)
 
         '''
         self.set_m4_speed(self.m4+pid_response_y)
@@ -191,32 +186,48 @@ class quadcopter():
 
 
     def calibrate(self):   #This is the auto calibration procedure of a normal ESC
-        self.pi.set_servo_pulsewidth(self.m1_pin, 0)
+        self.pi.set_servo_pulsewidth(self.m1_pin,0)
+        self.pi.set_servo_pulsewidth(self.m2_pin,0)
+        self.pi.set_servo_pulsewidth(self.m3_pin,0)
+        self.pi.set_servo_pulsewidth(self.m4_pin,0)
         print("Disconnect the battery and press Enter")
         inp = input()
         if inp == '':
             self.pi.set_servo_pulsewidth(self.m1_pin,self.MAX)
+            self.pi.set_servo_pulsewidth(self.m2_pin,self.MAX)
+            self.pi.set_servo_pulsewidth(self.m3_pin,self.MAX)
+            self.pi.set_servo_pulsewidth(self.m4_pin,self.MAX)
+                
             print("Connect the battery NOW.. you will here two beeps, then wait for a gradual falling tone then press Enter")
             inp = input()
             if inp == '':            
-                self.pi.set_servo_pulsewidth(self.m1_pin, self.MIN)
+                self.pi.set_servo_pulsewidth(self.m1_pin,self.MIN)
+                self.pi.set_servo_pulsewidth(self.m2_pin,self.MIN)
+                self.pi.set_servo_pulsewidth(self.m3_pin,self.MIN)
+                self.pi.set_servo_pulsewidth(self.m4_pin,self.MIN)
                 print ("Wierd eh! Special tone")
                 time.sleep(7)
                 print ("Wait for it ....")
                 time.sleep (5)
                 print ("Im working on it, DONT WORRY JUST WAIT.....")
-                self.pi.set_servo_pulsewidth(self.m1_pin, 0)
+                self.pi.set_servo_pulsewidth(self.m1_pin,0)
+                self.pi.set_servo_pulsewidth(self.m2_pin,0)
+                self.pi.set_servo_pulsewidth(self.m3_pin,0)
+                self.pi.set_servo_pulsewidth(self.m4_pin,0)
                 time.sleep(2)
                 print ("Arming ESC now...")
-                self.pi.set_servo_pulsewidth(self.m1_pin, self.MIN)
+                self.pi.set_servo_pulsewidth(self.m1_pin,self.MIN)
+                self.pi.set_servo_pulsewidth(self.m2_pin,self.MIN)
+                self.pi.set_servo_pulsewidth(self.m3_pin,self.MIN)
+                self.pi.set_servo_pulsewidth(self.m4_pin,self.MIN)
                 time.sleep(1)
                 print ("See.... uhhhhh")
 
     def set_all_speed(self,speed):
         self.set_m1_speed(speed)
-        self.set_m2_speed(0)
-        self.set_m3_speed(speed)
-        self.set_m4_speed(0)
+        #self.set_m2_speed(speed)
+        self.set_m4_speed(speed)
+        #self.set_m4_speed(speed)
 
     #MQTT FUNCTIONS
 
