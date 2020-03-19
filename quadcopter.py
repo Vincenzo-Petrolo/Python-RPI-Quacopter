@@ -12,7 +12,27 @@ import math
 
 rad_to_deg = 180/3.141592654
 
+
+ 
+MQTT_SERVER = "localhost" #specify the broker address, it can be IP of raspberry pi or simply localhost
+MQTT_PATH = "test_channel" #this is the name of topic, like temp
+ 
+# The callback for when the client receives a CONNACK response from the server.
+def on_connect(client, userdata, flags, rc):
+    print("Connected with result code "+str(rc))
+ 
+    # Subscribing in on_connect() means that if we lose the connection and
+    # reconnect then subscriptions will be renewed.
+    client.subscribe(MQTT_PATH)
+    client.subscribe("#")
+ 
+
+
 class quadcopter():
+ 
+
+    
+
     def __init__(self,m1_pin,m2_pin,m3_pin,m4_pin,calibrating):
         self.pitch  = 0
         self.roll   = 0
@@ -28,7 +48,8 @@ class quadcopter():
         self.m3_pin = m3_pin
         self.m4_pin = m4_pin
         self.now    = time.time_ns()
-        self.desidred_angle = 0
+        self.pitch_desired_angle = 0
+        self.roll_desired_angle = 0
         self.pi = pigpio.pi()                   #object rpi
         
         self.time   = 0
@@ -38,20 +59,99 @@ class quadcopter():
         self.Ki     = 0
         self.Kd     = 0.35
 
-        self.pidX    = PID(Kp=self.Kp,Ki=self.Ki,Kd=self.Kd,setpoint=self.desidred_angle)
-        self.pidY    = PID(Kp=self.Kp,Ki=self.Ki,Kd=self.Kd,setpoint=self.desidred_angle)
+        self.pidX    = PID(Kp=self.Kp,Ki=self.Ki,Kd=self.Kd,setpoint=self.roll_desired_angle)
+        self.pidY    = PID(Kp=self.Kp,Ki=self.Ki,Kd=self.Kd,setpoint=self.pitch_desired_angle)
 
         #MQTT info
-        self.hostname   = "192.168.43.230"
-        self.mqttc = mqtt.Client("drone")
-        self.mqttc.connect(self.hostname, 1883)
+        self.hostname         = "localhost"
+        self.mqttc = mqtt.Client()
+        self.mqttc.on_connect = on_connect
+        self.mqttc.on_message = self.on_message
+        self.mqttc.connect(MQTT_SERVER)
+        self.mqttc.loop_start()
         
-
         #MPU starts
 
         #ESC calibration
         if calibrating == True:
             self.calibrate()
+
+    def on_message(self,client, userdata, msg):
+        stringa = str(msg.payload).replace("b'",'')
+        stringa = str(stringa).replace("'",'')
+        #print(stringa)
+
+        #strange prints
+
+        if int(stringa.split(" ")[1]) == 100:
+            print("ok")
+
+        '''
+        if ("left" in msg.topic) == True:
+            vector  = str(stringa).split(" ")
+
+            if module == 100:
+                if phase > 315 and phase <= 45:
+                    #m1 and m4 +10, m2 and m3 -10
+                    self.set_m1_speed(self.m1 + 10)
+                    self.set_m4_speed(self.m4 + 10)
+                    self.set_m2_speed(self.m2 - 10)
+                    self.set_m3_speed(self.m3 - 10)
+                if phase > 45 and pahse <= 135:
+                    #all motors +10
+                    self.set_m1_speed(self.m1 + 10)
+                    self.set_m4_speed(self.m4 + 10)
+                    self.set_m2_speed(self.m2 + 10)
+                    self.set_m3_speed(self.m3 + 10)           
+
+                if phase > 135 and phase <= 225:
+                    #m2 and m3 +10, m1 and m4 -10
+                    self.set_m1_speed(self.m1 - 10)
+                    self.set_m4_speed(self.m4 - 10)
+                    self.set_m2_speed(self.m2 + 10)
+                    self.set_m3_speed(self.m3 + 10)
+
+                if phase > 225 and phase <= 315:
+                    #all motors -10        
+                    self.set_m1_speed(self.m1 - 10)
+                    self.set_m4_speed(self.m4 - 10)
+                    self.set_m2_speed(self.m2 - 10)
+                    self.set_m3_speed(self.m3 - 10)
+            if module == 0:
+                self.set_all_speed((self.MAX+self.MIN)/2)
+
+        if "right" in str(msg.topic):
+            vector  = str(msg.payload).split(' ')
+            phase   = int(vector[0])
+            module  = int(vector[1])
+
+            if module == 100:
+                if phase > 315 and phase <= 45:
+                    #set desired roll to -20 degrees
+                    self.roll_desired_angle = -20
+                if phase > 45 and pahse <= 135:
+                    #set desired pitch to 20 degrees
+                    self.pitch_desired_angle = 20
+                if phase > 135 and phase <= 225:
+                    #set desired roll to 20 degrees
+                    self.roll_desired_angle = 20
+                if phase > 225 and phase <= 315:
+                    #set desired pitch to -20 degrees        
+                    self.pitch_desired_angle = -20
+            if module == 0:
+                self.pitch_desired_angle    = 0
+                self.roll_desired_angle     = 0
+            '''
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -119,15 +219,15 @@ class quadcopter():
     def balance_PID(self):
         vect = self.get_roll_yaw_pitch()
 
-        pid_response_x  = (self.pidX(vect[0]))
-        pid_response_y  = -(self.pidY(vect[1]))
-
+        pid_response_x  = (self.pidX( vect[0] - self.roll_desired_angle))
+        pid_response_y  = -(self.pidY( vect[1] - self.pitch_desired_angle))
+        '''
         print(vect)
         print("\n")
 
         print("PIDX: "+str(pid_response_x))
         print("PIDY: "+str(pid_response_y))
-
+        '''
 
         #X balancing
         #self.set_m1_speed(self.m1+pid_response_x)
