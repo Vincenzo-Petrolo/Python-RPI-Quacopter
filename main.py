@@ -23,14 +23,8 @@ while i != 1200:
     i += 10
 
 while True:
-    '''
-    MOLTO IMPORTANTE, LA FUNZIONE DI PUBLISH E QUELLA DI RECEIVE SI CONTRASTANO, PERCIO SAREBBE NECESSARIO
-    SINCRONIZZARE I PROCESSI DI PUBBLICAZIONE E GETTER DEI COMANDI
-    '''
     quadricottero.balance_PID()    
-    #quadricottero.publish_info()
-    #print((quadricottero.m1,quadricottero.m2,quadricottero.m3,quadricottero.m4))
-    #print("\n")
-    #time.sleep(0.1)
-
-quadricottero.set_all_speed(0)
+    quadricottero.publish_info()
+    print((quadricottero.m1,quadricottero.m2,quadricottero.m3,quadricottero.m4))
+    print("\n")
+    time.sleep(0.1)

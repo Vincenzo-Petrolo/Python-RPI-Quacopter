@@ -9,8 +9,7 @@ import paho.mqtt.publish as publish
 from MPU6050 import *
 import time
 import math
-
-import motor
+from motor import *
 rad_to_deg = 180/3.141592654
 
 
@@ -19,20 +18,14 @@ def on_connect(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
     client.subscribe("#")
  
-
-
 class quadcopter():
- 
-
-    
 
     def __init__(self,m1_pin,m2_pin,m3_pin,m4_pin,calibrating):
         '''
             Angles of the quadcopter
+                    [ROLL,PITCH,YAW]
         '''
-        self.pitch  = 0
-        self.roll   = 0
-        self.yaw    = 0
+        self.angles = [0,0,0]
         '''
             Constants for the quadcopter
             MIN : is the minimum speed for each of the quadcopter motors
@@ -64,15 +57,11 @@ class quadcopter():
             The values of the PID, might be different for the ROLL and PITCH angles
         '''
         #ROLL
-        self.KpR     = 0.04
-        self.KiR     = 0
-        self.KdR     = 0
-        self.pidX    = PID(Kp=self.KpR,Ki=self.KiR,Kd=self.KdR,setpoint=self.ROLL_DES_ANGLE)
+        self.KR      = [0.04,0,0]
+        self.pidX    = PID(Kp=self.KR[0],Ki=self.KR[1],Kd=self.KR[2],setpoint=self.ROLL_DES_ANGLE)
         #PITCH
-        self.KpP     = 0.04
-        self.KiP     = 0
-        self.KdP     = 0
-        self.pidY    = PID(Kp=self.Kp,Ki=self.Ki,Kd=self.Kd,setpoint=self.PITCH_DES_ANGLE)
+        self.KP      = [0.04,0,0]
+        self.pidY    = PID(Kp=self.KP[0],Ki=self.KP[1],Kd=self.KP[2],setpoint=self.PITCH_DES_ANGLE)
 
 
         '''
@@ -83,6 +72,11 @@ class quadcopter():
         self.mqttc.on_message = self.on_message
         self.mqttc.connect(self.HOSTNAME)
         self.mqttc.loop_start()
+
+        '''
+        '''
+        self.power = False
+
        
         '''
             If one wants to calibrate it, during the creation the calibrate method is called, hence calibrating the motors
@@ -190,10 +184,10 @@ class quadcopter():
 
 
         #APPLYING FILTERS
-        self.roll   = (complementary_filter(self.roll,roll1,Gx,self.get_elapsed_time(),0.98))
-        self.pitch  = (complementary_filter(self.pitch,pitch1,Gy,self.get_elapsed_time(),0.98))      
+        self.angles[0]   = (complementary_filter(self.roll,roll1,Gx,self.get_elapsed_time(),0.98))
+        self.angles[1]  = (complementary_filter(self.pitch,pitch1,Gy,self.get_elapsed_time(),0.98))      
         
-        return (self.roll,self.pitch,self.yaw)
+        return self.angles
 
     '''
         The balance_PID method, is used to balance the quadcopter motors.
@@ -287,3 +281,51 @@ class quadcopter():
             topic = string + i
             self.mqttc.publish(topic,str(motor.get_speed()))
             
+    '''
+        Use this to start the quadcopter
+    '''
+    def start(self):
+        self.power = True
+        while self.power:
+            self.calibrate()
+            self.publish_info()
+            sleep(0.1)
+
+
+    '''
+        Use this in order to stop the motors
+    '''
+    def stop(self):
+        self.power = False
+        for motor in self.motors:
+            motor.slow_stop()
+
+    '''
+        Use this in case of emergency, be careful propellers might fly away
+    '''
+    def emergency__stop(self):
+        for motor in self.motors:
+            motor.hard_stop()
+    
+    '''
+        Use this and pass as argument 2 array, the one with PID for ROLL and the one
+        for PITCH. If the value is -1 the value is not changed, else is gets changed
+    '''
+    def set_Ks(self,array_KR,array_KP):
+        for i in range(0,len(array_K)):
+            if ( array_KR[i] >= 0):
+                self.KR[i] = array_KR[i]
+            if ( array_KP[i] >= 0):
+                self.KP[i] = array_KP[i]
+    
+    def get_KP(self):
+        return self.KP
+
+    def get_KR(self):
+        return self.KR
+
+    def get_motors(self):
+        return self.motors
+   
+    def is_powered(self):
+        return self.power
