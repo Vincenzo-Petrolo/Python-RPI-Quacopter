@@ -10,20 +10,13 @@ from MPU6050 import *
 import time
 import math
 
+import motor
 rad_to_deg = 180/3.141592654
 
 
- 
-MQTT_SERVER = "localhost" #specify the broker address, it can be IP of raspberry pi or simply localhost
-MQTT_PATH = "test_channel" #this is the name of topic, like temp
- 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
- 
-    # Subscribing in on_connect() means that if we lose the connection and
-    # reconnect then subscriptions will be renewed.
-    client.subscribe(MQTT_PATH)
     client.subscribe("#")
  
 
@@ -34,57 +27,77 @@ class quadcopter():
     
 
     def __init__(self,m1_pin,m2_pin,m3_pin,m4_pin,calibrating):
+        '''
+            Angles of the quadcopter
+        '''
         self.pitch  = 0
         self.roll   = 0
         self.yaw    = 0
-        self.m1     = 0                         #speeds
-        self.m2     = 0
-        self.m3     = 0
-        self.m4     = 0
+        '''
+            Constants for the quadcopter
+            MIN : is the minimum speed for each of the quadcopter motors
+            PITCH_DES_ANGLE : is the upper limit for the speed
+            ROLL_DES_ANGLE  : the angle of pitch desired, is is 0 degrees in idle
+           HOSTNAME : the broker to witch connect 
+        '''
+        self.MIN    = 1100
         self.MAX    = 1300
-        self.MIN    = 1100                      #to define
-        self.m1_pin = m1_pin
-        self.m2_pin = m2_pin
-        self.m3_pin = m3_pin
-        self.m4_pin = m4_pin
-        self.now    = time.time_ns()
-        self.pitch_desired_angle = 0
-        self.roll_desired_angle = 0
+        self.PITCH_DES_ANGLE = 0
+        self.ROLL_DES_ANGLE  = 0
+        self.HOSTNAME         = "localhost"
+        '''
+            Creating the pi object for interactions with motors
+        '''
         self.pi = pigpio.pi()                   #object rpi
         
-        self.time   = 0
+        '''
+            The quadcopter is composed by 4 motors
+        '''
+        self.motors  = [motor(m1_pin,self.MIN,self.MAX,self.pi),
+                        motor(m2_pin,self.MIN,self.MAX,self.pi),
+                        motor(m3_pin,self.MIN,self.MAX,self.pi),
+                        motor(m4_pin,self.MIN,self.MAX,self.pi)
+                        ]
+  
+        '''
+            The quadcopter balancing is done via a PID controller
+            The values of the PID, might be different for the ROLL and PITCH angles
+        '''
+        #ROLL
+        self.KpR     = 0.04
+        self.KiR     = 0
+        self.KdR     = 0
+        self.pidX    = PID(Kp=self.KpR,Ki=self.KiR,Kd=self.KdR,setpoint=self.ROLL_DES_ANGLE)
+        #PITCH
+        self.KpP     = 0.04
+        self.KiP     = 0
+        self.KdP     = 0
+        self.pidY    = PID(Kp=self.Kp,Ki=self.Ki,Kd=self.Kd,setpoint=self.PITCH_DES_ANGLE)
 
-        #PID parameters
-        self.Kp     = 0.04
-        self.Ki     = 0
-        self.Kd     = 0.35
 
-        self.pidX    = PID(Kp=self.Kp,Ki=self.Ki,Kd=self.Kd,setpoint=self.roll_desired_angle)
-        self.pidY    = PID(Kp=self.Kp,Ki=self.Ki,Kd=self.Kd,setpoint=self.pitch_desired_angle)
-
-        #MQTT info
-        self.hostname         = "localhost"
+        '''
+            MQTT is used as standar communication protocol between the android app and the quadcopter. It is not a big deal, but the simplest protocol i know, and for this reason the one i will use for the moment.
+        '''
         self.mqttc = mqtt.Client()
         self.mqttc.on_connect = on_connect
         self.mqttc.on_message = self.on_message
-        self.mqttc.connect(MQTT_SERVER)
+        self.mqttc.connect(self.HOSTNAME)
         self.mqttc.loop_start()
-        
-        #MPU starts
-
-        #ESC calibration
+       
+        '''
+            If one wants to calibrate it, during the creation the calibrate method is called, hence calibrating the motors
+        '''
         if calibrating == True:
             self.calibrate()
+
+
+    '''
+        The on_message method is used to handle MQTT messages. When a message is received, the method performs checks on the TOPICS, for example if the topic is STOP, then the quadcopter will procede to the STOP method
+    '''
 
     def on_message(self,client, userdata, msg):
         stringa = str(msg.payload).replace("b'",'')
         stringa = str(stringa).replace("'",'')
-        #print(stringa)
-
-        #strange prints
-
-        if int(stringa.split(" ")[1]) == 100:
-            print("ok")
 
         '''
         if ("left" in msg.topic) == True:
@@ -143,46 +156,13 @@ class quadcopter():
                 self.roll_desired_angle     = 0
             '''
 
-
-
-
-
-
-
-
-
-
-
-
-
-    def get_elapsed_time(self):
-        self.time   =  1/(30*pow(10,3))
-        return self.time                   #returns sampling frequency of MPU6050
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#-----------------------------------------------------------------------------------------------------------------------
-
-
-
+    '''
+        The get_roll_yaw_pitch method, returns an array containing
+                    [ ROLL , PITCH , YAW ]
+        Notes on the achieving of the angles: The angles, expecially for PITCH,ROLL
+        are achieved from the MPU6050 and in order to correct some imperfection 
+        a complementary filter is applied.
+    '''
     def get_roll_yaw_pitch(self):           
         acc_x = read_raw_data(ACCEL_XOUT_H)
         acc_y = read_raw_data(ACCEL_YOUT_H)
@@ -215,12 +195,21 @@ class quadcopter():
         
         return (self.roll,self.pitch,self.yaw)
 
+    '''
+        The balance_PID method, is used to balance the quadcopter motors.
+        They are balanced by adding or subtracting to the speeds of the motors
+        the results of the PID[ROLL|PITCH].
+    '''
+
 
     def balance_PID(self):
         vect = self.get_roll_yaw_pitch()
-
-        pid_response_x  = (self.pidX( vect[0] - self.roll_desired_angle))
-        pid_response_y  = -(self.pidY( vect[1] - self.pitch_desired_angle))
+        '''
+            In these two lines the error is calculated by the difference of the 
+            actual angle - the desidred_angle.
+        '''
+        pid_response_R  = (self.pidR( vect[0] - self.ROLL_DES_ANGLE))
+        pid_response_P  = -(self.pidP( vect[1] - self.PITCH_DES_ANGLE))
         '''
         print(vect)
         print("\n")
@@ -229,243 +218,60 @@ class quadcopter():
         print("PIDY: "+str(pid_response_y))
         '''
 
-        #X balancing
-        #self.set_m1_speed(self.m1+pid_response_x)
-        self.set_m3_speed(self.m3+pid_response_x)
-        #the - sign is due to the postive/negative default orientation of the MPU
-        self.set_m2_speed(self.m2-pid_response_x)
-        #self.set_m4_speed(self.m4-pid_response_x)
-
-        #Y balancing
-
-        #self.set_m4_speed(self.m4+pid_response_y)
-        self.set_m3_speed(self.m3+pid_response_y)
-        
-        #self.set_m1_speed(self.m1-pid_response_y)
-        self.set_m2_speed(self.m2-pid_response_y)
-
-
-#-----------------------------------------------------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        '''
+            after the response is calculated we change the speeds of the motors
+            according to that response.
+        '''
+        #ROLL
+        self.motors[0].set_speed(self.motor_1.get_speed() + pid_response_R,False)
+        self.motors[1].set_speed(self.motor_2.get_speed() - pid_response_R,False)
+        #PITCH
+        self.motors[2].set_speed(self.motor_3.get_speed() + pid_response_P,False)
+        self.motors[3].set_speed(self.motor_4.get_speed() - pid_response_P,False)
+
+
+    '''
+        The calibrate() method calibrates the motors following a procedure found on
+        the internet.
+    '''
     def calibrate(self):   #This is the auto calibration procedure of a normal ESC
-        self.pi.set_servo_pulsewidth(self.m1_pin,0)
-        self.pi.set_servo_pulsewidth(self.m2_pin,0)
-        self.pi.set_servo_pulsewidth(self.m3_pin,0)
-        self.pi.set_servo_pulsewidth(self.m4_pin,0)
+        for motor in self.motors:
+            motor.set_speed(0,True)
+
         print("Disconnect the battery and press Enter")
         inp = input()
         if inp == '':
-            self.pi.set_servo_pulsewidth(self.m1_pin,2000)
-            self.pi.set_servo_pulsewidth(self.m2_pin,2000)
-            self.pi.set_servo_pulsewidth(self.m3_pin,2000)
-            self.pi.set_servo_pulsewidth(self.m4_pin,2000)
-                
+            for motor in self.motors:
+                motor.set_speed(2000,True)
             print("Connect the battery NOW.. you will here two beeps, then wait for a gradual falling tone then press Enter")
             inp = input()
             if inp == '':            
-                self.pi.set_servo_pulsewidth(self.m1_pin,700)
-                self.pi.set_servo_pulsewidth(self.m2_pin,700)
-                self.pi.set_servo_pulsewidth(self.m3_pin,700)
-                self.pi.set_servo_pulsewidth(self.m4_pin,700)
+                for motor in self.motors:
+                    motor.set_speed(700,True)
                 print ("Wierd eh! Special tone")
                 time.sleep(7)
                 print ("Wait for it ....")
                 time.sleep (5)
                 print ("Im working on it, DONT WORRY JUST WAIT.....")
-                self.pi.set_servo_pulsewidth(self.m1_pin,0)
-                self.pi.set_servo_pulsewidth(self.m2_pin,0)
-                self.pi.set_servo_pulsewidth(self.m3_pin,0)
-                self.pi.set_servo_pulsewidth(self.m4_pin,0)
+                for motor in self.motors:
+                    motor.set_speed(0,True)
                 time.sleep(2)
                 print ("Arming ESC now...")
-                self.pi.set_servo_pulsewidth(self.m1_pin,700)
-                self.pi.set_servo_pulsewidth(self.m2_pin,700)
-                self.pi.set_servo_pulsewidth(self.m3_pin,700)
-                self.pi.set_servo_pulsewidth(self.m4_pin,700)
+                for motor in self.motors:
+                    motor.set_speed(700,True)
                 time.sleep(1)
                 print ("See.... uhhhhh")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    '''
+        This method is used to change all the speeds of the motors
+    '''
     def set_all_speed(self,speed):
-        #self.set_m1_speed(speed)
-        self.set_m2_speed(speed)
-        self.set_m3_speed(speed)
-        #self.set_m4_speed(speed)
+        for motor in self.motors:
+            motor.set_speed(speed,False)
 
-    #MQTT FUNCTIONS
-
+    '''
+        This method is used to publish telemetry data to MQTT
+    '''
     def publish_info(self):
         '''
         the topics are of type drone/(angle,motor_speed)/([roll,pitch,yaw],[m1,m2,m3,m4])
@@ -474,66 +280,10 @@ class quadcopter():
         self.mqttc.publish("drone/angle/pitch",str(self.pitch))
         self.mqttc.publish("drone/angle/yaw",str(self.yaw))
 
-
-        self.mqttc.publish("drone/motor_speed/m1",str(self.m1))
-        self.mqttc.publish("drone/motor_speed/m2",str(self.m2))
-        self.mqttc.publish("drone/motor_speed/m3",str(self.m3))
-        self.mqttc.publish("drone/motor_speed/m4",str(self.m4))
-
-
-
-    def get_error(self):
-        vect    = self.get_roll_yaw_pitch()
-        errorX  = vect[0] - self.desidred_angle
-        errorY  = vect[1] - self.desidred_angle
-
-        return (errorX,errorY)
-    
-    def is_stable(self):
-        vect    = self.get_roll_yaw_pitch
-        #depending on roll,pitch.yaw values, if they are approximately close to 0 then return True else False
-        if vect[0] < 1 and vect[1] < 1:
-            return True
-        return False
-    
-    def set_m1_speed(self,speed):
-        if (speed > self.MAX):
-            self.m1 = self.MAX
-        if (speed < self.MIN):
-            self.m1 = self.MIN
-        if (speed >= self.MIN and speed <= self.MAX):
-            self.m1 = speed
-        self.pi.set_servo_pulsewidth(self.m1_pin,self.m1)
-
-    def set_m2_speed(self,speed):
-        if (speed > self.MAX):
-            self.m2 = self.MAX
-        if (speed < self.MIN):
-            self.m2 = self.MIN
-        if (speed >= self.MIN and speed <= self.MAX):
-            self.m2 = speed
-        
-        self.pi.set_servo_pulsewidth(self.m2_pin,self.m2)
-
-
-    def set_m3_speed(self,speed):
-        if (speed > self.MAX):
-            self.m3 = self.MAX
-        if (speed < self.MIN):
-            self.m3 = self.MIN
-        if (speed >= self.MIN and speed <= self.MAX):
-            self.m3 = speed
-        
-        self.pi.set_servo_pulsewidth(self.m3_pin,self.m3)
-
-
-    def set_m4_speed(self,speed):
-        if (speed > self.MAX):
-            self.m4 = self.MAX
-        if (speed < self.MIN):
-            self.m4 = self.MIN
-        if (speed >= self.MIN and speed <= self.MAX):
-            self.m4 = speed
-        
-        self.pi.set_servo_pulsewidth(self.m4_pin,self.m4)
-    
+        string = "drone/motor_speed/motor_"
+        i = 0
+        for motor in self.motors:
+            i += 1
+            topic = string + i
+            self.mqttc.publish(topic,str(motor.get_speed()))
+            
