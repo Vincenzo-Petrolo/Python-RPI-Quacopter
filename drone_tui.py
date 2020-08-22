@@ -1,6 +1,6 @@
 import curses
 import time
-import _thread
+import threading
 
 from quadcopter import *
 def main():
@@ -29,8 +29,9 @@ def main():
         is called. That thread will represent the quadcopter propellers being powered
         as long as that thread runs, the quadcopter is flying
     '''
+    thread = threading.Thread(target=quadcopter.start,args=(quadricottero,))
     try:
-        _thread.start_new_thread(quadricottero.start())
+        thread.start()
     except:
         curses.echo()
         curses.nocbreak()
@@ -48,9 +49,11 @@ def main():
     while c != ord('q'):
         stdscr.addstr(2,5,"ROLL")
         stdscr.addstr(5,5,"PITCH")
-        for string in PID:
-            stdscr.addstr(3 + i,5,string + quadricottero.get_KR[i])
-            stdscr.addstr(6 + i,5,string + quadricottero.get_KP[i])
+        for string in PID: 
+            KP = quadricottero.get_KP[i]
+            KR = quadricottero.get_KR[i]
+            stdscr.addstr(3 + i,5,string + KP)
+            stdscr.addstr(6 + i,5,string + KR)
             i += 1
             
         c = stdscr.getch()

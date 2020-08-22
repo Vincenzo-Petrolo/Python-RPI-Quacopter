@@ -66,14 +66,15 @@ class quadcopter():
 
         '''
             MQTT is used as standar communication protocol between the android app and the quadcopter. It is not a big deal, but the simplest protocol i know, and for this reason the one i will use for the moment.
-        '''
         self.mqttc = mqtt.Client()
         self.mqttc.on_connect = on_connect
         self.mqttc.on_message = self.on_message
         self.mqttc.connect(self.HOSTNAME)
         self.mqttc.loop_start()
+        '''
 
         '''
+            Variables for generic informations.
         '''
         self.power = False
 
@@ -170,7 +171,6 @@ class quadcopter():
         Gx = gyro_x/131.0 
         Gy = gyro_y/131.0 
         Gz = gyro_z/131.0
-        
 
         g = math.sqrt(math.pow(Ax,2)+math.pow(Ay,2)+math.pow(Az,2))
 
@@ -284,11 +284,11 @@ class quadcopter():
     '''
         Use this to start the quadcopter
     '''
-    def start(self):
-        self.power = True
-        while self.power:
-            self.calibrate()
-            self.publish_info()
+    def start(quadricottero):
+        quadricottero.power = True
+        while quadricottero.power:
+            quadricottero.balance_PID()
+            quadricottero.publish_info()
             sleep(0.1)
 
 
