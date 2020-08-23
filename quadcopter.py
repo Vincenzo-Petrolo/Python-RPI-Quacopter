@@ -52,26 +52,27 @@ class quadcopter():
                         motor(m4_pin,self.MIN,self.MAX,self.pi)
                         ]
   
+        self.time   = 0
         '''
             The quadcopter balancing is done via a PID controller
             The values of the PID, might be different for the ROLL and PITCH angles
         '''
         #ROLL
         self.KR      = [0.04,0,0]
-        self.pidX    = PID(Kp=self.KR[0],Ki=self.KR[1],Kd=self.KR[2],setpoint=self.ROLL_DES_ANGLE)
+        self.pidR    = PID(Kp=self.KR[0],Ki=self.KR[1],Kd=self.KR[2],setpoint=self.ROLL_DES_ANGLE)
         #PITCH
         self.KP      = [0.04,0,0]
-        self.pidY    = PID(Kp=self.KP[0],Ki=self.KP[1],Kd=self.KP[2],setpoint=self.PITCH_DES_ANGLE)
+        self.pidP    = PID(Kp=self.KP[0],Ki=self.KP[1],Kd=self.KP[2],setpoint=self.PITCH_DES_ANGLE)
 
 
         '''
             MQTT is used as standar communication protocol between the android app and the quadcopter. It is not a big deal, but the simplest protocol i know, and for this reason the one i will use for the moment.
+        '''
         self.mqttc = mqtt.Client()
         self.mqttc.on_connect = on_connect
         self.mqttc.on_message = self.on_message
         self.mqttc.connect(self.HOSTNAME)
         self.mqttc.loop_start()
-        '''
 
         '''
             Variables for generic informations.
@@ -85,7 +86,10 @@ class quadcopter():
         if calibrating == True:
             self.calibrate()
 
-
+   
+    def get_elapsed_time(self):
+        self.time = 1/(30*pow(10,3))
+        return self.time
     '''
         The on_message method is used to handle MQTT messages. When a message is received, the method performs checks on the TOPICS, for example if the topic is STOP, then the quadcopter will procede to the STOP method
     '''
@@ -184,8 +188,8 @@ class quadcopter():
 
 
         #APPLYING FILTERS
-        self.angles[0]   = (complementary_filter(self.roll,roll1,Gx,self.get_elapsed_time(),0.98))
-        self.angles[1]  = (complementary_filter(self.pitch,pitch1,Gy,self.get_elapsed_time(),0.98))      
+        self.angles[0]   = (complementary_filter(self.angles[0],roll1,Gx,self.get_elapsed_time(),0.98))
+        self.angles[1]  = (complementary_filter(self.angles[1],pitch1,Gy,self.get_elapsed_time(),0.98))      
         
         return self.angles
 
@@ -198,30 +202,32 @@ class quadcopter():
 
     def balance_PID(self):
         vect = self.get_roll_yaw_pitch()
+        tmp = [0,0,0]
+        #copy the values to a new vector
+        for i in range(0,len(vect)):
+            tmp[i] = vect[i]
+
+        tmp1 = tmp[0]
+        tmp[0] += tmp[1]
+        tmp[1] -= tmp1
         '''
             In these two lines the error is calculated by the difference of the 
             actual angle - the desidred_angle.
         '''
-        pid_response_R  = (self.pidR( vect[0] - self.ROLL_DES_ANGLE))
-        pid_response_P  = -(self.pidP( vect[1] - self.PITCH_DES_ANGLE))
-        '''
-        print(vect)
-        print("\n")
-
-        print("PIDX: "+str(pid_response_x))
-        print("PIDY: "+str(pid_response_y))
-        '''
+        pid_response_R  = (self.pidR( tmp[0] - self.ROLL_DES_ANGLE))
+        pid_response_P  = -(self.pidP( tmp[1] - self.PITCH_DES_ANGLE))
+        print(tmp)
 
         '''
             after the response is calculated we change the speeds of the motors
             according to that response.
         '''
         #ROLL
-        self.motors[0].set_speed(self.motor_1.get_speed() + pid_response_R,False)
-        self.motors[1].set_speed(self.motor_2.get_speed() - pid_response_R,False)
+        self.motors[0].set_speed(self.motors[0].get_speed() + pid_response_R,False)
+        self.motors[1].set_speed(self.motors[1].get_speed() - pid_response_R,False)
         #PITCH
-        self.motors[2].set_speed(self.motor_3.get_speed() + pid_response_P,False)
-        self.motors[3].set_speed(self.motor_4.get_speed() - pid_response_P,False)
+        self.motors[2].set_speed(self.motors[2].get_speed() + pid_response_P,False)
+        self.motors[3].set_speed(self.motors[3].get_speed() - pid_response_P,False)
 
 
     '''
@@ -270,15 +276,15 @@ class quadcopter():
         '''
         the topics are of type drone/(angle,motor_speed)/([roll,pitch,yaw],[m1,m2,m3,m4])
         '''
-        self.mqttc.publish("drone/angle/roll",str(self.roll))
-        self.mqttc.publish("drone/angle/pitch",str(self.pitch))
-        self.mqttc.publish("drone/angle/yaw",str(self.yaw))
+        self.mqttc.publish("drone/angle/roll",str(self.angles[0]))
+        self.mqttc.publish("drone/angle/pitch",str(self.angles[1]))
+        self.mqttc.publish("drone/angle/yaw",str(self.angles[2]))
 
         string = "drone/motor_speed/motor_"
         i = 0
         for motor in self.motors:
             i += 1
-            topic = string + i
+            topic = string + str(i)
             self.mqttc.publish(topic,str(motor.get_speed()))
             
     '''
@@ -329,3 +335,5 @@ class quadcopter():
    
     def is_powered(self):
         return self.power
+    def get_angles(self):
+        return self.angles

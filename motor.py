@@ -8,7 +8,7 @@ class motor():
         self.speed = 0
         self.pi  = pi #used to interact with the raspberry pi
     
-    def set_speed(speed,no_limits):
+    def set_speed(self,speed,no_limits):
         if (no_limits is False):
             if (speed > self.MAX):
                 self.speed = self.MAX
@@ -21,12 +21,12 @@ class motor():
 
         self.pi.set_servo_pulsewidth(self.pin,self.speed)
 
-    def slow_stop():
+    def slow_stop(self):
         while (self.speed > 0):
             self.set_speed(self.speed - 50,True)
 
-    def hard_stop():
+    def hard_stop(self):
         self.set_speed(0,True)
 
-    def get_speed():
+    def get_speed(self):
         return self.speed
