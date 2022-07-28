@@ -14,6 +14,7 @@ import threading
 
 
 class AngleMeterAlpha:
+		yaw = 0
 		#Read the gyro and acceleromater values from MPU6050
 		def MPU_Init(self):
 
@@ -78,6 +79,9 @@ class AngleMeterAlpha:
 				accX = self.read_raw_data(ACCEL_XOUT_H)
 				accY = self.read_raw_data(ACCEL_YOUT_H)
 				accZ = self.read_raw_data(ACCEL_ZOUT_H)
+				
+				# Store into the class the values of accelerometer
+				self.accelerations = [accX, accY, accZ]
 
 				# print(accX,accY,accZ)
 				# print(math.sqrt((accY**2)+(accZ**2)))
@@ -110,10 +114,15 @@ class AngleMeterAlpha:
 							accY = self.read_raw_data(ACCEL_YOUT_H)
 							accZ = self.read_raw_data(ACCEL_ZOUT_H)
 
+							# Store into the class the values of accelerometer
+							self.accelerometer = [accX, accY, accZ]
+
 							#Read Gyroscope raw value
 							gyroX = self.read_raw_data(GYRO_XOUT_H)
 							gyroY = self.read_raw_data(GYRO_YOUT_H)
 							gyroZ = self.read_raw_data(GYRO_ZOUT_H)
+
+							# Store into the class the values of accelerometer
 
 							dt = time.time() - timer
 							timer = time.time()
@@ -127,6 +136,9 @@ class AngleMeterAlpha:
 
 							gyroXRate = gyroX/131
 							gyroYRate = gyroY/131
+							gyroZRate = gyroZ/131
+							#Vincenzo edit
+							self.yaw = self.yaw + int(gyroZRate + 0.25) * dt 
 
 							if (RestrictPitch):
 
@@ -158,6 +170,7 @@ class AngleMeterAlpha:
 							#angle = (rate of change of angle) * change in time
 							gyroXAngle = gyroXRate * dt
 							gyroYAngle = gyroYAngle * dt
+							gyroZAngle = gyroZRate * dt
 
 							#compAngle = constant * (old_compAngle + angle_obtained_from_gyro) + constant * angle_obtained from accelerometer
 							compAngleX = 0.93 * (compAngleX + gyroXRate * dt) + 0.07 * roll
@@ -205,6 +218,9 @@ class AngleMeterAlpha:
 
 		def getPitch(self):
 			return self.pitch
+		
+		def getYaw(self):
+			return self.yaw
 
 		def get_int_pitch(self):
 			return int(self.pitch)

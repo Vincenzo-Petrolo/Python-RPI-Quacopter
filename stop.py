@@ -4,5 +4,5 @@ THIS SHOULD RUN ON THE RASPERRY
 '''
 
 #creating a quadcopter object
-quadricottero = quadcopter(4,17,27,22,False)
+quadricottero = quadcopter(18,14,17,15,False)
 quadricottero.stop() 

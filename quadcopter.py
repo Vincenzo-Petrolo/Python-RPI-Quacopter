@@ -12,6 +12,7 @@ import math
 from motor import *
 import time
 from AngleMeterAlpha import AngleMeterAlpha
+import RPi.GPIO as GPIO
 
 rad_to_deg = 180/3.141592654
 
@@ -39,14 +40,16 @@ class quadcopter():
             ROLL_DES_ANGLE  : the angle of pitch desired, is is 0 degrees in idle
            HOSTNAME : the broker to witch connect 
         '''
-        self.MIN    = 1000
-        self.MAX    = 1400
+        self.MIN    = 1100
+        self.MAX    = 1500
         self.PITCH_DES_ANGLE = 0
         self.ROLL_DES_ANGLE  = 0
+        self.YAW_DES_ANGLE  = 0
         self.HOSTNAME         = "localhost"
         '''
             Creating the pi object for interactions with motors
         '''
+        GPIO.setmode(GPIO.BCM)
         self.pi = pigpio.pi()                   #object rpi
         
         '''
@@ -70,6 +73,9 @@ class quadcopter():
         #PITCH
         self.KP      = [0.04,0,0]
         self.pidP    = PID(Kp=self.KP[0],Ki=self.KP[1],Kd=self.KP[2],setpoint=self.PITCH_DES_ANGLE)
+        #YAW
+        self.KY      = [2,0,0]
+        self.pidY    = PID(Kp=self.KY[0],Ki=self.KY[1],Kd=self.KY[2],setpoint=self.YAW_DES_ANGLE)
 
 
         '''
@@ -95,8 +101,7 @@ class quadcopter():
         '''
         if calibrating == True:
             self.calibrate()
-
-   
+        
 
     def on_message(self,client, userdata, msg):
         stringa = str(msg.payload).replace("b'",'')
@@ -168,12 +173,12 @@ class quadcopter():
         are achieved from the MPU6050 and in order to correct some imperfection 
         a complementary filter is applied.
     '''
-    def get_roll_pitch(self):           
+    def get_roll_pitch_yaw(self):           
 
-        self.angles = [self.angleMeter.get_complementary_roll(), self.angleMeter.get_complementary_pitch()]
+        self.angles = [self.angleMeter.get_complementary_pitch(), self.angleMeter.get_complementary_roll(), self.angleMeter.getYaw()]
         
         return self.angles
-
+    
 
     '''
         The balance_PID method, is used to balance the quadcopter motors.
@@ -182,7 +187,7 @@ class quadcopter():
     '''
     def balance_PID(self):
         # Update the angle values
-        [roll, pitch] = self.get_roll_pitch()
+        [roll, pitch, yaw] = self.get_roll_pitch_yaw()
 
 
         '''
@@ -191,9 +196,31 @@ class quadcopter():
         '''
         pid_response_R  = self.pidR( roll - self.ROLL_DES_ANGLE)
         pid_response_P  = self.pidP( pitch - self.PITCH_DES_ANGLE)
+        pid_response_Y  = self.pidY( yaw - self.YAW_DES_ANGLE)
 
-        print(f"PIDR: {pid_response_R} | PIDP: {pid_response_P}")
+        # Correct the motors using the PITCH
+        self.motors[0].set_speed(self.motors[0].speed - int(pid_response_P),False)
+        self.motors[1].set_speed(self.motors[1].speed - int(pid_response_P),False)
+        self.motors[2].set_speed(self.motors[2].speed + int(pid_response_P),False)
+        self.motors[3].set_speed(self.motors[3].speed + int(pid_response_P),False)
 
+
+        # Correct the motors using the ROLL
+        self.motors[0].set_speed(self.motors[0].speed - int(pid_response_R),False)
+        self.motors[3].set_speed(self.motors[3].speed - int(pid_response_R),False)
+        self.motors[1].set_speed(self.motors[1].speed + int(pid_response_R),False)
+        self.motors[2].set_speed(self.motors[2].speed + int(pid_response_R),False)
+
+        # Correct the motors using the YAW
+        self.motors[0].set_speed(self.motors[0].speed - int(pid_response_Y),False)
+        self.motors[1].set_speed(self.motors[1].speed + int(pid_response_Y),False)
+        self.motors[2].set_speed(self.motors[2].speed - int(pid_response_Y),False)
+        self.motors[3].set_speed(self.motors[3].speed + int(pid_response_Y),False)
+
+
+
+        print(f"PIDR: {round(pid_response_R,2)} | PIDP: {round(pid_response_P,2)}  | PIDY: {round(pid_response_Y, 2)}")
+        print(f"ROLL: {round(self.angles[0],3)} | PITCH: {round(self.angles[1],3)} | YAW : {round(self.angles[2], 3)}")
 
     '''
         The calibrate() method calibrates the motors following a procedure found on
@@ -222,14 +249,55 @@ class quadcopter():
                     motor.set_speed(0,True)
                 time.sleep(2)
                 print ("Arming ESC now...")
-                for motor in self.motors:
-                    motor.set_speed(700,True)
-                time.sleep(1)
-                print ("See.... uhhhhh")
+                self.arm()
 
-    '''
+    def control(self): 
+        speed = 1300    # change your speed if you want to.... it should be between 700 - 2000
+        print("Controls - a to decrease speed & d to increase speed OR q to decrease a lot of speed & e to increase a lot of speed")
+        while True:
+            for motor in self.motors:
+                motor.set_speed(speed,False)
+            inp = input()
+            
+            if inp == "q":
+                speed -= 100    # decrementing the speed like hell
+                print("speed = %d" % speed)
+            elif inp == "e":    
+                speed += 100    # incrementing the speed like hell
+                print("speed = %d" % speed)
+            elif inp == "d":
+                speed += 10     # incrementing the speed 
+                print("speed = %d" % speed)
+            elif inp == "a":
+                speed -= 10     # decrementing the speed
+                print("speed = %d" % speed)
+            elif inp == "stop":
+                self.stop()          #going for the stop function
+                break
+            elif inp == "arm":
+                self.arm()
+                break	
+            else:
+                print("WHAT DID I SAID!! Press a,q,d or e")
+        '''
         This method is used to change all the speeds of the motors
     '''
+    def arm(self): #This is the arming procedure of an ESC 
+        print("Arming")
+        for speed in range(900, 1500):
+            for motor in self.motors:
+                print(f"Speed: {speed}")
+                motor.set_speed(speed, True)
+                time.sleep(.001)
+        
+        for speed in reversed(range(900,1500)):
+            for motor in self.motors:
+                print(f"Speed: {speed}")
+                motor.set_speed(speed, True)
+                time.sleep(.001)
+ 
+        #self.control() 
+    
     def set_all_speed(self,speed):
         for motor in self.motors:
             motor.set_speed(speed,True)
@@ -255,19 +323,17 @@ class quadcopter():
         Use this to start the quadcopter
     '''
     def start(self):
-        # Destroy the file
-        for v in range(800,1200):
-            self.set_all_speed(v)
-            print(v)
-            time.sleep(0.01)
-            self.start_time = round(time.time() * 1000)
+        self.arm()
+        #self.test_motors()
+        self.start_time = round(time.time() * 1000)
+        # End of testing, starting motors
+        self.start_motors()
+        # Starting pid test
         while True:
             # Balance the PID
             self.balance_PID()
             # Update the angle values
-            self.get_roll_pitch()
-            # Print to stdout
-            print(f"ROLL: {round(self.angles[0],3)} | PITCH: {round(self.angles[1],3)}")
+            self.get_roll_pitch_yaw()
             # Send data over MQTT
             self.publish_info()
             time.sleep(0.01)
@@ -286,3 +352,29 @@ class quadcopter():
     def emergency_stop(self):
         for motor in self.motors:
             motor.slow_stop()
+    
+    def test_single_motor(self, n_motor):
+        for speed in range(900, 1200):
+            self.motors[n_motor].set_speed(speed, True)
+            time.sleep(.01)
+    
+    def test_motors(self):
+        # Single motor testing
+        self.set_all_speed(0)
+        print("Testing motor 1")
+        self.test_single_motor(0)
+        self.set_all_speed(0)
+        print("Testing motor 2")
+        self.test_single_motor(1)
+        self.set_all_speed(0)
+        print("Testing motor 3")
+        self.test_single_motor(2)
+        self.set_all_speed(0)
+        print("Testing motor 4")
+        self.test_single_motor(3)
+        self.set_all_speed(0)
+
+    def start_motors(self):
+        self.set_all_speed(900)
+        for speed in range(900, 1100):
+            self.set_all_speed(speed)
