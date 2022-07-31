@@ -1,18 +1,12 @@
 from simple_pid import PID
 from FILTERS import *
-import os
-os.system("sudo killall pigpiod")
-os.system ("sudo pigpiod") #Launching GPIO library
-import pigpio
 import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
-from MPU6050 import *
 import time
-import math
 from motor import *
 import time
-from AngleMeterAlpha import AngleMeterAlpha
-import RPi.GPIO as GPIO
+import threading
+
 
 rad_to_deg = 180/3.141592654
 
@@ -20,17 +14,13 @@ rad_to_deg = 180/3.141592654
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
-    client.subscribe("#")
+    client.subscribe("motor/#")
+    client.subscribe("pid/#")
+    client.subscribe("stop/#")
  
 class quadcopter():
 
-    def __init__(self,m1_pin,m2_pin,m3_pin,m4_pin,calibrating):
-        '''
-            Angles of the quadcopter
-                    [ROLL,PITCH,YAW]
-        '''
-        self.angleMeter = AngleMeterAlpha()
-        self.angleMeter.measure()
+    def __init__(self,m1_pin,m2_pin,m3_pin,m4_pin):
 
         self.angles = [0,0,0]
         '''
@@ -46,19 +36,14 @@ class quadcopter():
         self.ROLL_DES_ANGLE  = 0
         self.YAW_DES_ANGLE  = 0
         self.HOSTNAME         = "localhost"
-        '''
-            Creating the pi object for interactions with motors
-        '''
-        GPIO.setmode(GPIO.BCM)
-        self.pi = pigpio.pi()                   #object rpi
         
         '''
             The quadcopter is composed by 4 motors
         '''
-        self.motors  = [motor(m1_pin,self.MIN,self.MAX,self.pi),
-                        motor(m2_pin,self.MIN,self.MAX,self.pi),
-                        motor(m4_pin,self.MIN,self.MAX,self.pi),
-                        motor(m3_pin,self.MIN,self.MAX,self.pi)
+        self.motors  = [motor(m1_pin,self.MIN,self.MAX,None),
+                        motor(m2_pin,self.MIN,self.MAX,None),
+                        motor(m4_pin,self.MIN,self.MAX,None),
+                        motor(m3_pin,self.MIN,self.MAX,None)
                         ]
   
         self.time   = 0
@@ -88,83 +73,78 @@ class quadcopter():
         self.mqttc.loop_start()
 
         '''
-            Variables for generic informations.
-        '''
-        self.power = False
-        '''
             Filters section
         '''
         self.filter0 = FILTER()
         self.filter1 = FILTER()
-        '''
-            calibrate it, during the creation the calibrate method is called, hence calibrating the motors
-        '''
-        if calibrating == True:
-            self.calibrate()
-        
+    
 
+    def start(self):
+        self.start_time = round(time.time() * 1000)
+        # Starting thread
+        self.pid_balancer_thread = threading.Thread(target=self.PID_balancer)
+
+        while True:
+            # Send data over MQTT
+            self.publish_info()
+            time.sleep(1)
+    
+    def PID_balancer(self):
+        while True:
+            # Balance the PID
+            self.balance_PID()
+            # Update the angle values
+            self.get_roll_pitch_yaw()
+            time.sleep(0.01)
+
+
+        
     def on_message(self,client, userdata, msg):
         stringa = str(msg.payload).replace("b'",'')
         stringa = str(stringa).replace("'",'')
 
-        if ("STOP" in msg.topic) == True:
-            self.emergency_stop()
-        '''
-        if ("left" in msg.topic) == True:
-            vector  = str(stringa).split(" ")
+        # Call the commands function
+        self.commands(msg.topic, stringa)
+    
 
-            if module == 100:
-                if phase > 315 and phase <= 45:
-                    #m1 and m4 +10, m2 and m3 -10
-                    self.set_m1_speed(self.m1 + 10)
-                    self.set_m4_speed(self.m4 + 10)
-                    self.set_m2_speed(self.m2 - 10)
-                    self.set_m3_speed(self.m3 - 10)
-                if phase > 45 and pahse <= 135:
-                    #all motors +10
-                    self.set_m1_speed(self.m1 + 10)
-                    self.set_m4_speed(self.m4 + 10)
-                    self.set_m2_speed(self.m2 + 10)
-                    self.set_m3_speed(self.m3 + 10)           
+    def commands(self, topic, payload):
+        # Split the topic in many topics
+        topics = topic.split('/') 
+        print(topics)
+        print(payload)
+        # Convention, first topic signals the functionality to use
+        # Then the subtopics are for disambiguation
+        # MOTOR
+        if topics[0] == "motor":
+            # Get the motor number
+            n_motor = int(topics[1])
+            print(f"Motor[{n_motor}] = {int(payload)}")
+            # Then it means i need to change the speed for that motor
+            self.motors[n_motor].set_speed(int(payload), False)
+        # PID
+        elif topics[0] == "pid":
+            print(f"Pid received")
+            # it means i want to change something any of the 3 pids
+            selected_pid = None
+            if topics[1] == "R":
+                selected_pid = self.pidR
+            elif topics[1] == "P":
+                selected_pid = self.pidP
+            elif topics[1] == "Y":
+                selected_pid = self.pidY
+            # Now see what parameter needs to be changed
+            if topics[2] == "Kp":
+                selected_pid.Kp = float(payload)
+            elif topics[2] == "Kd":
+                selected_pid.Kd = float(payload)
+            elif topics[2] == "Ki":
+                selected_pid.Ki = float(payload)
+            else:
+                selected_pid.setpoint = float(payload)
+        # Stop procedure
+        elif topics[0] == "STOP":
+            self.stop()
 
-                if phase > 135 and phase <= 225:
-                    #m2 and m3 +10, m1 and m4 -10
-                    self.set_m1_speed(self.m1 - 10)
-                    self.set_m4_speed(self.m4 - 10)
-                    self.set_m2_speed(self.m2 + 10)
-                    self.set_m3_speed(self.m3 + 10)
-
-                if phase > 225 and phase <= 315:
-                    #all motors -10        
-                    self.set_m1_speed(self.m1 - 10)
-                    self.set_m4_speed(self.m4 - 10)
-                    self.set_m2_speed(self.m2 - 10)
-                    self.set_m3_speed(self.m3 - 10)
-            if module == 0:
-                self.set_all_speed((self.MAX+self.MIN)/2)
-
-        if "right" in str(msg.topic):
-            vector  = str(msg.payload).split(' ')
-            phase   = int(vector[0])
-            module  = int(vector[1])
-
-            if module == 100:
-                if phase > 315 and phase <= 45:
-                    #set desired roll to -20 degrees
-                    self.roll_desired_angle = -20
-                if phase > 45 and pahse <= 135:
-                    #set desired pitch to 20 degrees
-                    self.pitch_desired_angle = 20
-                if phase > 135 and phase <= 225:
-                    #set desired roll to 20 degrees
-                    self.roll_desired_angle = 20
-                if phase > 225 and phase <= 315:
-                    #set desired pitch to -20 degrees        
-                    self.pitch_desired_angle = -20
-            if module == 0:
-                self.pitch_desired_angle    = 0
-                self.roll_desired_angle     = 0
-            '''
 
     '''
         The get_roll_yaw_pitch method, returns an array containing
@@ -175,7 +155,7 @@ class quadcopter():
     '''
     def get_roll_pitch_yaw(self):           
 
-        self.angles = [self.angleMeter.get_complementary_pitch(), self.angleMeter.get_complementary_roll(), self.angleMeter.getYaw()]
+        #self.angles = [self.angleMeter.get_complementary_pitch(), self.angleMeter.get_complementary_roll(), self.angleMeter.getYaw()]
         
         return self.angles
     
@@ -279,7 +259,7 @@ class quadcopter():
                 break	
             else:
                 print("WHAT DID I SAID!! Press a,q,d or e")
-        '''
+    '''
         This method is used to change all the speeds of the motors
     '''
     def arm(self): #This is the arming procedure of an ESC 
@@ -319,25 +299,6 @@ class quadcopter():
             topic = string + str(i)
             self.mqttc.publish(topic,str(motor.get_speed()))
 
-    '''
-        Use this to start the quadcopter
-    '''
-    def start(self):
-        self.arm()
-        #self.test_motors()
-        self.start_time = round(time.time() * 1000)
-        # End of testing, starting motors
-        self.start_motors()
-        # Starting pid test
-        while True:
-            # Balance the PID
-            self.balance_PID()
-            # Update the angle values
-            self.get_roll_pitch_yaw()
-            # Send data over MQTT
-            self.publish_info()
-            time.sleep(0.01)
-
 
     '''
         Use this in order to stop the motors
@@ -346,13 +307,6 @@ class quadcopter():
         for motor in self.motors:
             motor.slow_stop()
 
-    '''
-        Use this in case of emergency, be careful propellers might fly away
-    '''
-    def emergency_stop(self):
-        for motor in self.motors:
-            motor.slow_stop()
-    
     def test_single_motor(self, n_motor):
         for speed in range(900, 1200):
             self.motors[n_motor].set_speed(speed, True)
@@ -373,8 +327,3 @@ class quadcopter():
         print("Testing motor 4")
         self.test_single_motor(3)
         self.set_all_speed(0)
-
-    def start_motors(self):
-        self.set_all_speed(900)
-        for speed in range(900, 1100):
-            self.set_all_speed(speed)

@@ -19,14 +19,13 @@ class motor():
         else:
             self.speed = speed
 
-        self.pi.set_servo_pulsewidth(self.pin,self.speed)
-
     def slow_stop(self):
-        while (self.speed -50 >500):
-            self.set_speed(self.speed - 50,True)
+        while (self.speed >1000):
+            self.speed -= 10
+            self.set_speed(self.speed,True)
 
     def hard_stop(self):
-        self.set_speed(500,True)
+        self.set_speed(900,True)
 
     def get_speed(self):
         return self.speed
