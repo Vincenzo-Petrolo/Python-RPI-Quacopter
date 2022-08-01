@@ -399,13 +399,21 @@ def on_message(client, userdata, msg):
         else:
             pass
 
-    print(msg.topic+" "+str(msg.payload))
-
 def connect_to_broker():
     ip_address = ui.lineEdit.text()
     client.connect(str(ip_address), port=1883)
     client.loop_start()
     pass
+
+def send_target_roll():
+    roll = int(ui.roll_slider.value())
+    client.publish("drone/control/roll", str(roll))
+
+def send_target_pitch():
+    pitch = int(ui.pitch_slider.value())
+    client.publish("drone/control/pitch", str(pitch))
+
+
 
 # Setup MQTT client object
 client = mqtt.Client()
@@ -415,6 +423,8 @@ client.on_message = on_message
 
 # Map connect button to the connection of the broker on MQTT
 ui.connectButton.clicked.connect(connect_to_broker)
+ui.roll_slider.valueChanged.connect(send_target_roll)
+ui.pitch_slider.valueChanged.connect(send_target_pitch)
 
 
 
