@@ -289,15 +289,16 @@ class quadcopter():
         '''
         the topics are of type drone/(angle,motor_speed)/([roll,pitch,yaw],[m1,m2,m3,m4])
         '''
-        self.mqttc.publish("drone/angle/roll",str(self.angles[0]))
-        self.mqttc.publish("drone/angle/pitch",str(self.angles[1]))
+        self.mqttc.publish("drone/feedback/angle/roll",str(self.angles[0]))
+        self.mqttc.publish("drone/feedback/angle/pitch",str(self.angles[1]))
+        self.mqttc.publish("drone/feedback/angle/yaw",str(self.angles[2]))
 
-        string = "drone/motor_speed/motor_"
+        string = "drone/feedback/motor"
         i = 0
         for motor in self.motors:
-            i += 1
-            topic = string + str(i)
+            topic = string + '/' + str(i)
             self.mqttc.publish(topic,str(motor.get_speed()))
+            i += 1
 
 
     '''
