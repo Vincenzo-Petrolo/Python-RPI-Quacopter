@@ -110,40 +110,46 @@ class quadcopter():
     def commands(self, topic, payload):
         # Split the topic in many topics
         topics = topic.split('/') 
-        print(topics)
-        print(payload)
-        # Convention, first topic signals the functionality to use
-        # Then the subtopics are for disambiguation
-        # MOTOR
-        if topics[0] == "motor":
-            # Get the motor number
-            n_motor = int(topics[1])
-            print(f"Motor[{n_motor}] = {int(payload)}")
-            # Then it means i need to change the speed for that motor
-            self.motors[n_motor].set_speed(int(payload), False)
-        # PID
-        elif topics[0] == "pid":
-            print(f"Pid received")
-            # it means i want to change something any of the 3 pids
-            selected_pid = None
-            if topics[1] == "R":
-                selected_pid = self.pidR
-            elif topics[1] == "P":
-                selected_pid = self.pidP
-            elif topics[1] == "Y":
-                selected_pid = self.pidY
-            # Now see what parameter needs to be changed
-            if topics[2] == "Kp":
-                selected_pid.Kp = float(payload)
-            elif topics[2] == "Kd":
-                selected_pid.Kd = float(payload)
-            elif topics[2] == "Ki":
-                selected_pid.Ki = float(payload)
-            else:
-                selected_pid.setpoint = float(payload)
-        # Stop procedure
-        elif topics[0] == "STOP":
-            self.stop()
+        if topics[0] == "drone" and (topics[1] == "control" or topics[1] == "tuning"):
+            # then read the subtopics
+            if topics[2] == "roll":
+                self.ROLL_DES_ANGLE = int(payload)
+            elif topics[2] == "pitch":
+                self.PITCH_DES_ANGLE = int(payload)
+            elif topics[2] == "stop":
+                self.stop()
+            elif topics[2] == "calibrate":
+                self.stop()
+                self.calibrate()
+            elif topics[2] == "arm":
+                self.arm()
+            elif topics[2] == "R":
+                if topics[3] == "P":
+                    self.pidR.Kp = float(payload)
+                elif topics[3] == "D":
+                    self.pidR.Kd = float(payload)
+                elif topics[3] == "I":
+                    self.pidR.Ki = float(payload)
+                else:
+                    pass
+            elif topics[2] == "P":
+                if topics[3] == "P":
+                    self.pidP.Kp = float(payload)
+                elif topics[3] == "D":
+                    self.pidP.Kd = float(payload)
+                elif topics[3] == "I":
+                    self.pidP.Ki = float(payload)
+                else:
+                    pass
+            elif topics[2] == "Y":
+                if topics[3] == "P":
+                    self.pidY.Kp = float(payload)
+                elif topics[3] == "D":
+                    self.pidY.Kd = float(payload)
+                elif topics[3] == "I":
+                    self.pidY.Ki = float(payload)
+                else:
+                    pass
 
 
     '''
