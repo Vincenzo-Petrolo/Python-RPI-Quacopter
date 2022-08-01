@@ -438,6 +438,16 @@ ui.pidR_kp.valueChanged.connect(functools.partial(send_tuning,"R", "P", ui.pidR_
 ui.pidR_kd.valueChanged.connect(functools.partial(send_tuning,"R", "D", ui.pidR_kd))
 ui.pidR_ki.valueChanged.connect(functools.partial(send_tuning,"R", "I", ui.pidR_ki))
 
+ui.pidP_kp.valueChanged.connect(functools.partial(send_tuning,"P", "P", ui.pidP_kp))
+ui.pidP_kd.valueChanged.connect(functools.partial(send_tuning,"P", "D", ui.pidP_kd))
+ui.pidP_ki.valueChanged.connect(functools.partial(send_tuning,"P", "I", ui.pidP_ki))
+
+ui.pidY_kp.valueChanged.connect(functools.partial(send_tuning,"y", "P", ui.pidY_kp))
+ui.pidY_kp_2.valueChanged.connect(functools.partial(send_tuning,"y", "D", ui.pidY_kp_2))
+ui.pidY_kp_3.valueChanged.connect(functools.partial(send_tuning,"y", "I", ui.pidY_kp_3))
+
+
+
 
 # Exit functions
 client.loop_stop()
