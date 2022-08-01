@@ -413,6 +413,8 @@ def send_target_pitch():
     pitch = int(ui.pitch_slider.value())
     client.publish("drone/control/pitch", str(pitch))
 
+def send_signal(signal_name):
+    client.publish("drone/control/" + str(signal_name), str(signal_name))
 
 
 # Setup MQTT client object
@@ -425,7 +427,9 @@ client.on_message = on_message
 ui.connectButton.clicked.connect(connect_to_broker)
 ui.roll_slider.valueChanged.connect(send_target_roll)
 ui.pitch_slider.valueChanged.connect(send_target_pitch)
-
+ui.stopButton.clicked.connect(functools.partial(send_signal, "stop"))
+ui.calibrateButton.clicked.connect(functools.partial(send_signal, "calibrate"))
+ui.armButton.clicked.connect(functools.partial(send_signal, "arm"))
 
 
 # Exit functions
