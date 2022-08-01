@@ -416,6 +416,10 @@ def send_target_pitch():
 def send_signal(signal_name):
     client.publish("drone/control/" + str(signal_name), str(signal_name))
 
+def send_tuning(pidType, constantType, pidObj):
+    value = pidObj.value()
+    client.publish("drone/tuning/"+str(pidType)+'/'+str(constantType), str(value))
+
 
 # Setup MQTT client object
 client = mqtt.Client()
@@ -430,6 +434,9 @@ ui.pitch_slider.valueChanged.connect(send_target_pitch)
 ui.stopButton.clicked.connect(functools.partial(send_signal, "stop"))
 ui.calibrateButton.clicked.connect(functools.partial(send_signal, "calibrate"))
 ui.armButton.clicked.connect(functools.partial(send_signal, "arm"))
+ui.pidR_kp.valueChanged.connect(functools.partial(send_tuning,"R", "P", ui.pidR_kp))
+ui.pidR_kd.valueChanged.connect(functools.partial(send_tuning,"R", "D", ui.pidR_kd))
+ui.pidR_ki.valueChanged.connect(functools.partial(send_tuning,"R", "I", ui.pidR_ki))
 
 
 # Exit functions
