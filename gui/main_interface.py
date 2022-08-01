@@ -442,9 +442,9 @@ ui.pidP_kp.valueChanged.connect(functools.partial(send_tuning,"P", "P", ui.pidP_
 ui.pidP_kd.valueChanged.connect(functools.partial(send_tuning,"P", "D", ui.pidP_kd))
 ui.pidP_ki.valueChanged.connect(functools.partial(send_tuning,"P", "I", ui.pidP_ki))
 
-ui.pidY_kp.valueChanged.connect(functools.partial(send_tuning,"y", "P", ui.pidY_kp))
-ui.pidY_kp_2.valueChanged.connect(functools.partial(send_tuning,"y", "D", ui.pidY_kp_2))
-ui.pidY_kp_3.valueChanged.connect(functools.partial(send_tuning,"y", "I", ui.pidY_kp_3))
+ui.pidY_kp.valueChanged.connect(functools.partial(send_tuning,"Y", "P", ui.pidY_kp))
+ui.pidY_kp_2.valueChanged.connect(functools.partial(send_tuning,"Y", "D", ui.pidY_kp_2))
+ui.pidY_kp_3.valueChanged.connect(functools.partial(send_tuning,"Y", "I", ui.pidY_kp_3))
 
 
 
