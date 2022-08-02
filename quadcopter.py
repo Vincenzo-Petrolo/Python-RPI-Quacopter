@@ -150,6 +150,10 @@ class quadcopter():
                     self.pidY.Ki = float(payload)
                 else:
                     pass
+            elif topics[2] == "motor":
+                self.motors[int(topics[3])].set_speed(int(payload))
+            else:
+                pass
 
 
     '''
