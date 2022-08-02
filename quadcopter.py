@@ -165,7 +165,12 @@ class quadcopter():
         
         return self.angles
     
-
+    def non_return_condition(self):
+        # If either roll or pitch above 45° then stop the drone
+        if (abs(self.angles[0]) >= 45 or abs(self.angles[1]) >= 45):
+            return True
+        
+        return False
     '''
         The balance_PID method, is used to balance the quadcopter motors.
         They are balanced by adding or subtracting to the speeds of the motors
@@ -175,6 +180,11 @@ class quadcopter():
         # Update the angle values
         [roll, pitch, yaw] = self.get_roll_pitch_yaw()
 
+        # Check for non-return condition
+        if (self.non_return_condition()):
+            # The motors are not strong enough to avoid the danger
+            self.stop()
+            return
 
         '''
             In these two lines the error is calculated by the difference of the 
